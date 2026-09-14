@@ -1,69 +1,91 @@
 import board
 import digitalio
 import time
-import pwmio
 import usb_midi
 import adafruit_midi
 from adafruit_midi.note_on import NoteOn
 from adafruit_midi.note_off import NoteOff
 
-# Define pins for 7 note buttons
-note_pins = [board.GP2, board.GP3, board.GP4, board.GP5, board.GP6, board.GP7, board.GP8]
-note_buttons = []
+# ==============================
+# CONFIGURAÇÃO DA MATRIZ (61 TECLAS)
+# ==============================
 
-# Define octave control buttons
-octave_up = digitalio.DigitalInOut(board.GP9)
-octave_down = digitalio.DigitalInOut(board.GP10)
+# Linhas (flat esquerdo) – OUTPUT
+row_pins = [
+    board.GP2, board.GP3, board.GP4, board.GP5,
+    board.GP6, board.GP7, board.GP8, board.GP9
+]
 
-# Setup octave buttons with pull-up
-octave_up.switch_to_input(pull=digitalio.Pull.UP)
-octave_down.switch_to_input(pull=digitalio.Pull.UP)
+# Colunas (flat direito) – INPUT com pull-up
+col_pins = [
+    board.GP10, board.GP11, board.GP12, board.GP13,
+    board.GP14, board.GP15, board.GP16, board.GP17
+]
 
-# Setup 7 note buttons with pull-up
-for pin in note_pins:
-    btn = digitalio.DigitalInOut(pin)
-    btn.switch_to_input(pull=digitalio.Pull.UP)
-    note_buttons.append(btn)
+rows = []
+cols = []
 
-# PWM for speaker on GP15
-buzzer = pwmio.PWMOut(board.GP15, duty_cycle=0, frequency=440, variable_frequency=True)
+for pin in row_pins:
+    r = digitalio.DigitalInOut(pin)
+    r.direction = digitalio.Direction.OUTPUT
+    r.value = True  # HIGH por padrão
+    rows.append(r)
 
-# MIDI setup
-midi = adafruit_midi.MIDI(midi_out=usb_midi.ports[1], out_channel=0)
+for pin in col_pins:
+    c = digitalio.DigitalInOut(pin)
+    c.direction = digitalio.Direction.INPUT
+    c.pull = digitalio.Pull.UP
+    cols.append(c)
 
-# C major scale notes (MIDI numbers for C4 to B4)
-note_numbers = [60, 62, 64, 65, 67, 69, 71]
+# ==============================
+# USB MIDI (CANAL 1)
+# ==============================
 
-# Octave state
-octave_shift = 0
-last_button_states = [True]*7  # All start unpressed (True = not pressed with pull-up)
-note_playing = [False]*7
+midi = adafruit_midi.MIDI(
+    midi_out=usb_midi.ports[1],
+    out_channel=0  # Canal 1 (0-indexed)
+)
+
+# ==============================
+# ESTADO DAS TECLAS
+# ==============================
+
+NUM_ROWS = 8
+NUM_COLS = 8
+
+key_state = [[False for _ in range(NUM_COLS)] for _ in range(NUM_ROWS)]
+
+BASE_NOTE = 36  # C2 (Dó 2)
+MAX_NOTE = 96   # C7 (Dó 7)
+
+DEBOUNCE_TIME = 0.005
+
+# ==============================
+# LOOP PRINCIPAL DE VARREDURA
+# ==============================
 
 while True:
-    # Handle octave buttons (pressed = LOW)
-    if not octave_up.value:
-        octave_shift = min(octave_shift + 1, 3)  # Limit to 3 octaves up
-        time.sleep(0.3)  # Debounce
-    if not octave_down.value:
-        octave_shift = max(octave_shift - 1, -3)  # Limit to 3 octaves down
-        time.sleep(0.3)
+    for row_index, row in enumerate(rows):
+        # Ativa a linha atual (LOW)
+        row.value = False
+        time.sleep(DEBOUNCE_TIME)
 
-    # Handle 7 note buttons
-    for i, btn in enumerate(note_buttons):
-        current_state = btn.value  # True when not pressed, False when pressed
-        note = note_numbers[i] + (12 * octave_shift)
+        for col_index, col in enumerate(cols):
+            pressed = not col.value  # LOW = pressionado (pull-up)
+            note = BASE_NOTE + (row_index * 8) + col_index
 
-        if not current_state and last_button_states[i]:  # Button pressed
-            midi.send(NoteOn(note, 127))
-            buzzer.frequency = int(440 * 2 ** ((note - 69) / 12))  # Convert MIDI note to Hz
-            buzzer.duty_cycle = 32768
-            note_playing[i] = True
+            if note > MAX_NOTE:
+                continue
 
-        elif current_state and not last_button_states[i]:  # Button released
-            midi.send(NoteOff(note, 0))
-            buzzer.duty_cycle = 0
-            note_playing[i] = False
+            if pressed and not key_state[row_index][col_index]:
+                midi.send(NoteOn(note, 127))
+                key_state[row_index][col_index] = True
 
-        last_button_states[i] = current_state
+            elif not pressed and key_state[row_index][col_index]:
+                midi.send(NoteOff(note, 0))
+                key_state[row_index][col_index] = False
 
-    time.sleep(0.01)
+        # Desativa a linha (retorna para HIGH)
+        row.value = True
+
+    time.sleep(0.001)
