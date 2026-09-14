@@ -9,6 +9,16 @@
 
 ---
 
+## 📸 Arquitetura de Hardware & Pinout Oficial
+
+> **Pinagem e Mapeamento de Hardware:** Esquema oficial de conexão das linhas e colunas da matriz 8x8 nas GPIOs do microcontrolador RP2040:
+
+<p align="center">
+  <img src="./docs/pico_pinout.png" width="75%" alt="Diagrama de Pinagem do Raspberry Pi Pico RP2040" />
+</p>
+
+---
+
 ## 📌 Visão Geral do Projeto
 
 Controlador musical físico **USB-MIDI Class-Compliant** de 61 teclas desenvolvido sobre o microcontrolador **RP2040 (Raspberry Pi Pico)** com **CircuitPython**. O instrumento é reconhecido nativamente por computadores (macOS, Windows, Linux) e dispositivos móveis (Android e iOS/iPadOS via adaptador USB-OTG), sem necessidade de instalação de drivers adicionais.
